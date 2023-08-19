@@ -5,8 +5,38 @@
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/assert.h>
 
-void i2c_slave_init(uint8_t ownaddress);
+// Antenna valid commands
+#define RESET 0xAA
+#define ARM 0xAD
+#define DISARM 0xAC
+#define DEPLOY_ANT_1 0xA1
+#define DEPLOY_ANT_2 0xA2
+#define DEPLOY_ANT_3 0xA3
+#define DEPLOY_ANT_4 0xA4
+#define DEPLOY_SEQUENCIAL 0xA5
+#define DEPLOY_ANT_1_OVERRIDE 0xBA
+#define DEPLOY_ANT_2_OVERRIDE 0xBB
+#define DEPLOY_ANT_3_OVERRIDE 0xBC
+#define DEPLOY_ANT_4_OVERRIDE 0xBD
+#define DEPLOY_CANCEL 0xA9
+#define MEASURE_TEMPERATURE 0xC0
+#define REPORT_DEPLOY_COUNTER_1 0xB0
+#define REPORT_DEPLOY_COUNTER_2 0xB1
+#define REPORT_DEPLOY_COUNTER_3 0xB2
+#define REPORT_DEPLOY_COUNTER_4 0xB3
+#define REPORT_DEPLOY_TIMER_1 0xB4
+#define REPORT_DEPLOY_TIMER_2 0xB5
+#define REPORT_DEPLOY_TIMER_3 0xB6
+#define REPORT_DEPLOY_TIMER_4 0xB7
+#define REPORT_DEPLOY_STATUS 0xC3
 
+void i2c_slave_init(uint8_t ownaddress);
+void sequencial(uint8_t sequencial_counter);
+void command_decode(uint8_t *response);
+
+uint8_t deploy_counter_1, deploy_counter_2, deploy_counter_3, deploy_counter_4;
+uint8_t sq_counter = 0;
+uint16_t deploy_timer_1, deploy_timer_2, deploy_timer_3, deploy_timer_4;
 static uint8_t rx_buffer[2];
 static uint8_t tx_buffer[2];
 static uint8_t *rx_pos;
@@ -31,26 +61,10 @@ int main(void)
 
    while( 1 )
      {
-        /* Check for a command */
-        if (rx_buffer[0] == 0xC0) //Read temperature command
-        {
-            gpio_toggle(GPIOC, GPIO13);
-            tx_buffer[0] = 0x0A;
-            tx_buffer[1] = 0xBC;
-
-            rx_buffer[0] = 0x00;
-            rx_buffer[1] = 0x00;
-        }
-        else if (rx_buffer[0] == 0xA2) //Report antenna deployment activation count
-        {
-            gpio_toggle(GPIOC, GPIO13);
-
-            rx_buffer[0] = 0x00;
-            rx_buffer[1] = 0x00;
-        }
-        
+        /* Check for a valid command */
+        command_decode(tx_buffer);
+    }
    return 0;
-   }
 }   
 
 void i2c_slave_init(uint8_t ownaddress)
@@ -125,4 +139,178 @@ void i2c1_ev_isr(void)
         //(void) I2C_SR1(I2C1);
         I2C_SR1(I2C1) &= ~(I2C_SR1_AF);
      }
+}
+
+/* Simulates the sequencial deployment */
+void sequencial(uint8_t sequencial_counter) {
+  /* For each case increment the respective deployment counter  */
+  switch (sequencial_counter) {
+  case 0:
+    deploy_counter_1++;
+    break;
+  case 1:
+    deploy_counter_2++;
+    break;
+  case 2:
+    deploy_counter_3++;
+    break;
+  case 3:
+    deploy_counter_4++;
+    sq_counter = 0;
+    break;
+  default:
+    sq_counter = 0;
+    break;
+  }
+}
+
+/* Decide the action upon the command received */
+void command_decode(uint8_t *response) {
+
+  /* Simply turn the led on */
+  gpio_toggle(GPIOC, GPIO13);
+
+  /* Switch statement to check all valid commands and how to treat then */
+  switch (rx_buffer[0]) {
+  case ARM:
+    // do nothing, since there is nothing to increment or respond
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case RESET:
+    // do nothing, since there is nothing to increment or respond
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DISARM:
+    // do nothing, since there is nothing to increment or respond
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_1:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_1++;
+    deploy_timer_1++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_2:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_2++;
+    deploy_timer_2++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_3:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_3++;
+    deploy_timer_3++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_4:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_4++;
+    deploy_timer_4++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_SEQUENCIAL:
+    /* Contains the logic for sequencial deployment */
+    sequencial(sq_counter++);
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_1_OVERRIDE:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_1++;
+    deploy_timer_1++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_2_OVERRIDE:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_2++;
+    deploy_timer_2++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_3_OVERRIDE:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_3++;
+    deploy_timer_3++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_ANT_4_OVERRIDE:
+    /* Updating the counters, necessary for other command responses */
+    deploy_counter_4++;
+    deploy_timer_4++;
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case DEPLOY_CANCEL:
+    // do nothing, since there is nothing to increment or respond
+    response[0] = 0x00;
+    response[1] = 0x00;
+    break;
+  case MEASURE_TEMPERATURE:
+    /* Simulates reading the temperature and responding its value */
+    response[0] = 0xFF;
+    response[1] = 0x03;
+    break;
+  case REPORT_DEPLOY_TIMER_1:
+    /* Simulates responding deploy time using two bytes */
+    deploy_timer_1 = deploy_timer_1;
+    response[0] = (deploy_timer_1 & 0xFF00) >> 8;
+    response[1] = (deploy_timer_1 & 0xFF);
+    break;
+  case REPORT_DEPLOY_TIMER_2:
+    /* Simulates responding deploy time using two bytes */
+    deploy_timer_2 = deploy_timer_2;
+    response[0] = (deploy_timer_2 & 0xFF00) >> 8;
+    response[1] = (deploy_timer_2 & 0xFF);
+    break;
+  case REPORT_DEPLOY_TIMER_3:
+    /* Simulates responding deploy time using two bytes */
+    deploy_timer_3 = deploy_timer_3;
+    response[0] = (deploy_timer_3 & 0xFF00) >> 8;
+    response[1] = (deploy_timer_3 & 0xFF);
+    break;
+  case REPORT_DEPLOY_TIMER_4:
+    /* Simulates responding deploy time using two bytes */
+    deploy_timer_4 = deploy_timer_4;
+    response[0] = (deploy_timer_4 & 0xFF00) >> 8;
+    response[1] = (deploy_timer_4 & 0xFF);
+    break;
+  case REPORT_DEPLOY_COUNTER_1:
+    /* Simulates responding deploy counter using one byte */
+    response[0] = deploy_counter_1;
+    response[1] = 0x00;
+    break;
+  case REPORT_DEPLOY_COUNTER_2:
+    /* Simulates responding deploy counter using one byte */
+    response[0] = deploy_counter_2;
+    response[1] = 0x00;
+    break;
+  case REPORT_DEPLOY_COUNTER_3:
+    /* Simulates responding deploy counter using one byte */
+    response[0] = deploy_counter_3;
+    response[1] = 0x00;
+    break;
+  case REPORT_DEPLOY_COUNTER_4:
+    /* Simulates responding deploy counter using one byte */
+    response[0] = deploy_counter_4;
+    response[1] = 0x00;
+    break;
+  case REPORT_DEPLOY_STATUS:
+    /* Simulates responding the deploy status using two bytes */
+    response[0] = 0xFF;
+    response[1] = 0xFF;
+    break;
+  default:
+    /* Used for debug purposes, literally means invalid command */
+    response[0] = 0x88;
+    response[1] = 0x88;
+  }
 }
