@@ -55,7 +55,8 @@ static uint8_t tx_buffer[2];
 static uint8_t *rx_pos;
 static uint8_t *tx_pos;
 
-int main(void) {
+int main(void) 
+{
   // set STM32 to 72 MHz
   rcc_clock_setup_in_hse_8mhz_out_72mhz();
 
@@ -72,9 +73,10 @@ int main(void) {
   i2c_slave_init(0x32);
   delay_setup();
 
-  while (1) {
+  while (1) 
+  {
     /* Check for a valid command */
-    command_decode(tx_buffer);
+    command_decode(tx_buffer); /* Receives as parameter buffer to store responses*/
 
     /* Delay to simulate antenna behavior */
     delay_us(4);
@@ -82,7 +84,8 @@ int main(void) {
   }
 }
 
-void i2c_slave_init(uint8_t ownaddress) {
+void i2c_slave_init(uint8_t ownaddress) 
+{
   /* Enables clock for gpio_b and i2c_1 modules */
   rcc_periph_clock_enable(RCC_GPIOB);
   rcc_periph_clock_enable(RCC_I2C1);
@@ -108,13 +111,15 @@ void i2c_slave_init(uint8_t ownaddress) {
 }
 
 // i2c1 event ISR
-void i2c1_ev_isr(void) {
+void i2c1_ev_isr(void) 
+{
   uint32_t sr1, sr2;
 
   sr1 = I2C_SR1(I2C1);
 
   // Address matched (Slave)
-  if (sr1 & I2C_SR1_ADDR) {
+  if (sr1 & I2C_SR1_ADDR) 
+  {
     // Start of a transaction
     rx_pos = rx_buffer;
     tx_pos = tx_buffer;
@@ -125,75 +130,94 @@ void i2c1_ev_isr(void) {
 
     // gpio_toggle(GPIOC, GPIO13);
   }
+ 
   // Receive buffer not empty
-  else if (sr1 & I2C_SR1_RxNE) {
+  else if (sr1 & I2C_SR1_RxNE) 
+  {
     // read bytes from slave
     *(rx_pos++) = i2c_get_data(I2C1);
+
+    // Resets the command reptition control variable
     it_counter = 0x0000;
 
   }
+
   // Transmit buffer empty & Data byte transfer not finished
-  else if ((sr1 & I2C_SR1_TxE) && !(sr1 & I2C_SR1_BTF)) {
+  else if ((sr1 & I2C_SR1_TxE) && !(sr1 & I2C_SR1_BTF)) 
+  {
     // send data to master in MSB order
     i2c_send_data(I2C1, *tx_pos);
     *tx_pos++ = 0x00; /*Clears after sending */
   }
+
   // done by master by sending STOP
   // this event happens when slave is in Recv mode at the end of communication
-  else if (sr1 & I2C_SR1_STOPF) {
+  else if (sr1 & I2C_SR1_STOPF) 
+  {
     i2c_peripheral_enable(I2C1);
   }
+  
   // this event happens when slave is in transmit mode at the end of
   // communication
-  else if (sr1 & I2C_SR1_AF) {
+  else if (sr1 & I2C_SR1_AF) 
+  {
     //(void) I2C_SR1(I2C1);
     I2C_SR1(I2C1) &= ~(I2C_SR1_AF);
   }
 }
 
 /* Simulates the sequencial deployment */
-void sequencial(void) {
+void sequencial(void) 
+{
   /* For each case increment the respective deployment counter  */
-  switch (sq_counter) {
+  switch (sq_counter) 
+  {
   case 0:
+    /* Increment counter and setup for next antenna */
     deploy_counter_1++;
     sq_counter++;
     break;
   case 1:
+    /* Increment counter and setup for next antenna */
     deploy_counter_2++;
     sq_counter++;
     break;
   case 2:
+    /* Increment counter and setup for next antenna */
     deploy_counter_3++;
     sq_counter++;
     break;
   case 3:
+    /* Increment counter and reset for next sequencial deploy */
     deploy_counter_4++;
     sq_counter = 0;
     break;
   default:
+    /* Impossible to match unless something breaks */
     sq_counter = 0;
     break;
   }
 }
 
 /* Decide the action upon the command received */
-void command_decode(uint8_t *response) {
+void command_decode(uint8_t *response) 
+{
 
   /* Switch statement to check all valid commands and how to treat then */
-  switch (rx_buffer[0]) {
+  switch (rx_buffer[0]) 
+  {
   case ARM:
-    // do nothing, since there is nothing to increment or respond
+    /* do nothing, since there is nothing to increment or respond */
     response[0] = 0x00;
     response[1] = 0x00;
     break;
   case RESET:
-    // do nothing, since there is nothing to increment or respond
+    /* do nothing, since there is nothing to increment or respond */
     response[0] = 0x00;
     response[1] = 0x00;
     break;
   case DISARM:
-    // do nothing, since there is nothing to increment or respond
+    /* do nothing, since there is nothing to increment or respond */
     response[0] = 0x00;
     response[1] = 0x00;
     break;
@@ -201,120 +225,165 @@ void command_decode(uint8_t *response) {
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0001)) {
+    if (!(it_counter & 0x0001)) 
+    {
       deploy_counter_1++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0001;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_1++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_ANT_2:
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0002)) {
+    if (!(it_counter & 0x0002)) 
+    {
       deploy_counter_2++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0002;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_2++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_ANT_3:
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0004)) {
+    if (!(it_counter & 0x0004)) 
+    {
       deploy_counter_3++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0004;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_3++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_ANT_4:
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0008)) {
+    if (!(it_counter & 0x0008)) 
+    {
       deploy_counter_4++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0008;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_4++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_SEQUENCIAL:
     /* Contains the logic for sequencial deployment */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0100)) {
-      sequencial();
+    if (!(it_counter & 0x0100))
+    {
+      sequencial(); /* Call sequencial deployment */
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0100;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_ANT_1_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0010)) {
+    if (!(it_counter & 0x0010)) 
+    {
       deploy_counter_1++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0010;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_1++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_ANT_2_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0020)) {
+    if (!(it_counter & 0x0020)) 
+    {
       deploy_counter_2++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0020;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_2++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_ANT_3_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0040)) {
+    if (!(it_counter & 0x0040)) 
+    {
       deploy_counter_3++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0040;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_3++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_ANT_4_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
 
     /* Separating counter from timer */
-    if (!(it_counter & 0x0080)) {
+    if (!(it_counter & 0x0080)) 
+    {
       deploy_counter_4++;
+
+      /* Avoids counter getting incremented while waiting for new commands */
       it_counter |= 0x0080;
+
+      /* Receives command parameter send by i2c */
+      time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     }
     deploy_timer_4++;
     response[0] = 0x00;
     response[1] = 0x00;
-    time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
     break;
   case DEPLOY_CANCEL:
-    // do nothing, since there is nothing to increment or respond
+    /* do nothing, since there is nothing to increment or respond */
     response[0] = 0x00;
     response[1] = 0x00;
     break;
@@ -325,31 +394,31 @@ void command_decode(uint8_t *response) {
     break;
   case REPORT_DEPLOY_TIMER_1:
     /* Simulates responding deploy time using two bytes */
-    deploy_timer_1 += time_to_burn;
     deploy_timer_1 = deploy_timer_1;
     response[0] = (deploy_timer_1 & 0xFF00) >> 8;
     response[1] = (deploy_timer_1 & 0xFF);
+    deploy_timer_1 = 0;
     break;
   case REPORT_DEPLOY_TIMER_2:
     /* Simulates responding deploy time using two bytes */
-    deploy_timer_2 += time_to_burn;
     deploy_timer_2 = deploy_timer_2;
     response[0] = (deploy_timer_2 & 0xFF00) >> 8;
     response[1] = (deploy_timer_2 & 0xFF);
+    deploy_timer_2 = 0;
     break;
   case REPORT_DEPLOY_TIMER_3:
     /* Simulates responding deploy time using two bytes */
-    deploy_timer_3 += time_to_burn;
     deploy_timer_3 = deploy_timer_3;
     response[0] = (deploy_timer_3 & 0xFF00) >> 8;
     response[1] = (deploy_timer_3 & 0xFF);
+    deploy_timer_3 = 0;
     break;
   case REPORT_DEPLOY_TIMER_4:
     /* Simulates responding deploy time using two bytes */
-    deploy_timer_4 += time_to_burn;
     deploy_timer_4 = deploy_timer_4;
     response[0] = (deploy_timer_4 & 0xFF00) >> 8;
     response[1] = (deploy_timer_4 & 0xFF);
+    deploy_timer_4 = 0;
     break;
   case REPORT_DEPLOY_COUNTER_1:
     /* Simulates responding deploy counter using one byte */
@@ -383,26 +452,33 @@ void command_decode(uint8_t *response) {
   }
 }
 /* Setup the timer used for delay */
-void delay_setup(void) {
-  rcc_periph_clock_enable(RCC_TIM4);
-  timer_set_prescaler(TIM4, 0);
-  timer_set_period(TIM4, 71);
-  TIM_EGR(TIM4) = TIM_EGR_UG;
-  TIM_CR1(TIM4) |= TIM_CR1_URS;
-  timer_enable_irq(TIM4, TIM_DIER_UIE);
-  nvic_enable_irq(NVIC_TIM4_IRQ);
+void delay_setup(void) 
+{
+  rcc_periph_clock_enable(RCC_TIM4); /* Enable clock for timer */
+
+  timer_set_prescaler(TIM4, 0); /* Set prescaler for timer */
+  timer_set_period(TIM4, 71); /* Set period to create a microsecond interrupt */
+
+  TIM_EGR(TIM4) = TIM_EGR_UG; /* Necessary to uptade registers */
+  TIM_CR1(TIM4) |= TIM_CR1_URS; /* Configures interrupt to only occur after overflow */
+  
+  timer_enable_irq(TIM4, TIM_DIER_UIE); /* Enables interrupt for timer */
+  nvic_enable_irq(NVIC_TIM4_IRQ); /* Necessary to enable interrupt for timer */
 }
 /* Timer event isr */
-void tim4_isr(void) {
-  TIM_SR(TIM4) &= ~TIM_SR_UIF;
-  myticks_++;
+void tim4_isr(void) 
+{
+  TIM_SR(TIM4) &= ~TIM_SR_UIF; /* Clears interrupt flag */
+  myticks_++; /* Sinalizes that 1 microsecond passed */
 }
 
 /* Create delays in microseconds */
-void delay_us(uint32_t us) {
-  myticks_ = 0;
-  TIM_CR1(TIM4) |= TIM_CR1_CEN;
-  while (myticks_ < us)
-    ;
-  TIM_CR1(TIM4) &= ~TIM_CR1_CEN;
+void delay_us(uint32_t us) 
+{
+  myticks_ = 0; /* Resets counter */
+  TIM_CR1(TIM4) |= TIM_CR1_CEN; /* Starts the counting */
+
+  while (myticks_ < us); /* Lock the process until "us" microseconds passed */
+    
+  TIM_CR1(TIM4) &= ~TIM_CR1_CEN; /* Clear the starting flag */
 }
