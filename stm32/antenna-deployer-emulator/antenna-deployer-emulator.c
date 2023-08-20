@@ -4,6 +4,7 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/i2c.h>
 #include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/timer.h>
 
 // Antenna valid commands
 #define RESET 0xAA
@@ -34,18 +35,21 @@
 void i2c_slave_init(uint8_t ownaddress);
 void sequencial(void);
 void command_decode(uint8_t *response);
+void delay_us(uint32_t us);
+void delay_setup(void);
 
 uint8_t deploy_counter_1 = 0;
 uint8_t deploy_counter_2 = 0;
 uint8_t deploy_counter_3 = 0;
 uint8_t deploy_counter_4 = 0;
 uint8_t sq_counter = 0;
+uint16_t it_counter = 0;    /* Each bit of this variable controls counters repetitons */
 uint32_t deploy_timer_1 = 0;
 uint32_t deploy_timer_2 = 0;
 uint32_t deploy_timer_3 = 0;
 uint32_t deploy_timer_4 = 0;
 uint32_t time_to_burn = 0;
-uint32_t myticks_ = 0;
+volatile uint32_t myticks_ = 0;
 static uint8_t rx_buffer[2];
 static uint8_t tx_buffer[2];
 static uint8_t *rx_pos;
@@ -71,7 +75,10 @@ int main(void) {
   while (1) {
     /* Check for a valid command */
     command_decode(tx_buffer);
+
+    /* Delay to simulate antenna behavior */
     delay_us(4);
+
   }
 }
 
@@ -122,6 +129,7 @@ void i2c1_ev_isr(void) {
   else if (sr1 & I2C_SR1_RxNE) {
     // read bytes from slave
     *(rx_pos++) = i2c_get_data(I2C1);
+    it_counter = 0x0000;
 
   }
   // Transmit buffer empty & Data byte transfer not finished
@@ -172,9 +180,6 @@ void sequencial(void) {
 /* Decide the action upon the command received */
 void command_decode(uint8_t *response) {
 
-  /* Simply turn the led on */
-  gpio_toggle(GPIOC, GPIO13);
-
   /* Switch statement to check all valid commands and how to treat then */
   switch (rx_buffer[0]) {
   case ARM:
@@ -194,92 +199,119 @@ void command_decode(uint8_t *response) {
     break;
   case DEPLOY_ANT_1:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_1++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0001)) {
+      deploy_counter_1++;
+      it_counter |= 0x0001;
+    }
     deploy_timer_1++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_ANT_2:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_2++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0002)) {
+      deploy_counter_2++;
+      it_counter |= 0x0002;
+    }
     deploy_timer_2++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_ANT_3:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_3++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0004)) {
+      deploy_counter_3++;
+      it_counter |= 0x0004;
+    }
     deploy_timer_3++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_ANT_4:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_4++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0008)) {
+      deploy_counter_4++;
+      it_counter |= 0x0008;
+    }
     deploy_timer_4++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_SEQUENCIAL:
     /* Contains the logic for sequencial deployment */
-    sequencial();
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0100)) {
+      sequencial();
+      it_counter |= 0x0100;
+    }
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_ANT_1_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_1++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0010)) {
+      deploy_counter_1++;
+      it_counter |= 0x0010;
+    }
     deploy_timer_1++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_ANT_2_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_2++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0020)) {
+      deploy_counter_2++;
+      it_counter |= 0x0020;
+    }
     deploy_timer_2++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_ANT_3_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_3++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0040)) {
+      deploy_counter_3++;
+      it_counter |= 0x0040;
+    }
     deploy_timer_3++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_ANT_4_OVERRIDE:
     /* Updating the counters, necessary for other command responses */
-    deploy_counter_4++;
+
+    /* Separating counter from timer */
+    if (!(it_counter & 0x0080)) {
+      deploy_counter_4++;
+      it_counter |= 0x0080;
+    }
     deploy_timer_4++;
     response[0] = 0x00;
     response[1] = 0x00;
     time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
-    rx_buffer[0] = 0x00;
-    rx_buffer[1] = 0x00;
     break;
   case DEPLOY_CANCEL:
     // do nothing, since there is nothing to increment or respond
@@ -350,22 +382,23 @@ void command_decode(uint8_t *response) {
     response[1] = 0x00;
   }
 }
-// Setup the timer used for delay
+/* Setup the timer used for delay */
 void delay_setup(void) {
   rcc_periph_clock_enable(RCC_TIM4);
   timer_set_prescaler(TIM4, 0);
   timer_set_period(TIM4, 71);
   TIM_EGR(TIM4) = TIM_EGR_UG;
   TIM_CR1(TIM4) |= TIM_CR1_URS;
-  TIM_DIER(TIM4) |= TIM_DIER_UIE;
+  timer_enable_irq(TIM4, TIM_DIER_UIE);
   nvic_enable_irq(NVIC_TIM4_IRQ);
 }
-// Timer event isr
+/* Timer event isr */
 void tim4_isr(void) {
-  TIM_SR(TIM4) & | ~TIM_SR_UIF;
+  TIM_SR(TIM4) &= ~TIM_SR_UIF;
   myticks_++;
 }
 
+/* Create delays in microseconds */
 void delay_us(uint32_t us) {
   myticks_ = 0;
   TIM_CR1(TIM4) |= TIM_CR1_CEN;
