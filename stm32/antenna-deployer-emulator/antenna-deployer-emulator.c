@@ -45,6 +45,7 @@ uint32_t deploy_timer_2 = 0;
 uint32_t deploy_timer_3 = 0;
 uint32_t deploy_timer_4 = 0;
 uint32_t time_to_burn = 0;
+uint32_t myticks_ = 0;
 static uint8_t rx_buffer[2];
 static uint8_t tx_buffer[2];
 static uint8_t *rx_pos;
@@ -65,10 +66,12 @@ int main(void) {
 
   // initialize i2c slave
   i2c_slave_init(0x32);
+  delay_setup();
 
   while (1) {
     /* Check for a valid command */
     command_decode(tx_buffer);
+    delay_us(4);
   }
 }
 
@@ -346,4 +349,27 @@ void command_decode(uint8_t *response) {
     response[0] = 0x00;
     response[1] = 0x00;
   }
+}
+// Setup the timer used for delay
+void delay_setup(void) {
+  rcc_periph_clock_enable(RCC_TIM4);
+  timer_set_prescaler(TIM4, 0);
+  timer_set_period(TIM4, 71);
+  TIM_EGR(TIM4) = TIM_EGR_UG;
+  TIM_CR1(TIM4) |= TIM_CR1_URS;
+  TIM_DIER(TIM4) |= TIM_DIER_UIE;
+  nvic_enable_irq(NVIC_TIM4_IRQ);
+}
+// Timer event isr
+void tim4_isr(void) {
+  TIM_SR(TIM4) & | ~TIM_SR_UIF;
+  myticks_++;
+}
+
+void delay_us(uint32_t us) {
+  myticks_ = 0;
+  TIM_CR1(TIM4) |= TIM_CR1_CEN;
+  while (myticks_ < us)
+    ;
+  TIM_CR1(TIM4) &= ~TIM_CR1_CEN;
 }
