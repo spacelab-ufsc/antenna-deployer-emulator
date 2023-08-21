@@ -69,7 +69,7 @@ int main(void)
     gpio_set(GPIOC, GPIO13);
 
     // initialize i2c slave
-    i2c_slave_init(0x32);
+    i2c_slave_init(0x31);
     delay_setup();
 
     while (1)
