@@ -26,8 +26,8 @@ $ sudo apt install stlink-tools gcc-arm-none-eabi
 ### Hardware Requirements
 
 Its quite simple to prepare the emulator, the only connections required are 3v3 and Gnd pins for powering,
-besides the i2c related pins, SCL and SDA, which are mapped to PB6 and PB7, respectively. Also i2c needs a 
-pull-up resistor in both SCL and SDA lines, so if your module isn't providing then you will need to add it aswell.
+besides the i2c related pins, SCL and SDA, which are mapped to PB6 and PB7, respectively. Also, i2c needs a 
+pull-up resistor in both SCL and SDA lines, meaning that if your module isn't providing then you will need to add it aswell.
 
 
 ### Software Especifications
