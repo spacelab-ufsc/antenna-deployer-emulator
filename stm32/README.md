@@ -18,7 +18,7 @@ Platform-specific installation:
 #### Ubuntu / Debian
 
 ```
-sudo apt install stlink-tools gcc-arm-none-eabi
+$ sudo apt install stlink-tools gcc-arm-none-eabi
 
 ```
 ## Usage
@@ -36,15 +36,13 @@ for that you can do as follows:
 To build the emulator and libopencm3 used as a hal, you can just run:
 
 ```
-make
-
+$ make                                                                           
 ```
 
 Finally, to flash to microcontroller its needed to connect the stm32 to your machine with the ST-LINK and run the command:
 
 ```
-make flash
-
+$ make flash  
 ```
 
 
