@@ -31,27 +31,31 @@
 #define REPORT_DEPLOY_TIMER_4 0xB7
 #define REPORT_DEPLOY_STATUS 0xC3
 #define TIME_STEP 3200
+#define DELAY_PERIOD 4 /* In microseconds */
+#define SLAVE_ADDRESS 0x31
 
-void i2c_slave_init(uint8_t ownaddress);
-void sequencial(void);
-void command_decode(uint8_t *response);
-void delay_us(uint32_t us);
-void delay_setup(void);
+static void i2c_slave_init(uint8_t ownaddress);
+static void sequencial(void);
+static void command_decode(uint8_t *response);
+static void delay_us(uint32_t us);
+static void delay_setup(void);
+static void setup(void);
 
-uint8_t deploy_counter_1 = 0;
-uint8_t deploy_counter_2 = 0;
-uint8_t deploy_counter_3 = 0;
-uint8_t deploy_counter_4 = 0;
-uint8_t sq_counter = 0;
-uint16_t it_counter = 0; /* Each bit of this variable controls counters repetitons */
-uint32_t deploy_timer_1 = 0;
-uint32_t deploy_timer_2 = 0;
-uint32_t deploy_timer_3 = 0;
-uint32_t deploy_timer_4 = 0;
-uint32_t time_to_burn = 0;
-volatile uint32_t myticks_ = 0;
+static uint8_t deploy_counter_1 = 0;
+static uint8_t deploy_counter_2 = 0;
+static uint8_t deploy_counter_3 = 0;
+static uint8_t deploy_counter_4 = 0;
+static uint8_t sq_counter = 0;
+static uint16_t it_counter = 0; /* Each bit of this variable controls counters repetitons */
+static uint32_t deploy_timer_1 = 0;
+static uint32_t deploy_timer_2 = 0;
+static uint32_t deploy_timer_3 = 0;
+static uint32_t deploy_timer_4 = 0;
+static uint32_t time_to_burn = 0;
+static volatile uint32_t myticks_ = 0;
 static uint8_t rx_buffer[2];
 static uint8_t tx_buffer[2];
+static uint8_t deploy_status[2] = {0};
 static uint8_t *rx_pos;
 static uint8_t *tx_pos;
 
@@ -69,8 +73,11 @@ int main(void)
     gpio_set(GPIOC, GPIO13);
 
     // initialize i2c slave
-    i2c_slave_init(0x31);
+    i2c_slave_init(SLAVE_ADDRESS);
     delay_setup();
+
+    // Initialize antenna status register
+    setup();
 
     while (1)
     {
@@ -78,11 +85,11 @@ int main(void)
         command_decode(tx_buffer); /* Receives as parameter buffer to store responses*/
 
         /* Delay to simulate antenna behavior */
-        delay_us(4);
+        delay_us(DELAY_PERIOD);
     }
 }
 
-void i2c_slave_init(uint8_t ownaddress)
+static void i2c_slave_init(uint8_t ownaddress)
 {
     /* Enables clock for gpio_b and i2c_1 modules */
     rcc_periph_clock_enable(RCC_GPIOB);
@@ -164,7 +171,7 @@ void i2c1_ev_isr(void)
 }
 
 /* Simulates the sequencial deployment */
-void sequencial(void)
+static void sequencial(void)
 {
     /* For each case increment the respective deployment counter  */
     switch (sq_counter)
@@ -173,21 +180,28 @@ void sequencial(void)
         /* Increment counter and setup for next antenna */
         deploy_counter_1++;
         sq_counter++;
+        deploy_status[1] &= ~(0x80);
+        sequencial();
         break;
     case 1:
         /* Increment counter and setup for next antenna */
         deploy_counter_2++;
         sq_counter++;
+        deploy_status[1] &= ~(0x08);
+        sequencial();
         break;
     case 2:
         /* Increment counter and setup for next antenna */
         deploy_counter_3++;
         sq_counter++;
+        deploy_status[0] &= ~(0x80);
+        sequencial();
         break;
     case 3:
         /* Increment counter and reset for next sequencial deploy */
         deploy_counter_4++;
         sq_counter = 0;
+        deploy_status[0] &= ~(0x08);
         break;
     default:
         /* Impossible to match unless something breaks */
@@ -197,26 +211,22 @@ void sequencial(void)
 }
 
 /* Decide the action upon the command received */
-void command_decode(uint8_t *response)
+static void command_decode(uint8_t *response)
 {
 
     /* Switch statement to check all valid commands and how to treat then */
     switch (rx_buffer[0])
     {
     case ARM:
-        /* do nothing, since there is nothing to increment or respond */
-        response[0] = 0x00;
-        response[1] = 0x00;
+        deploy_status[0] |= 0x01;
         break;
     case RESET:
-        /* do nothing, since there is nothing to increment or respond */
-        response[0] = 0x00;
-        response[1] = 0x00;
+        setup();
         break;
     case DISARM:
-        /* do nothing, since there is nothing to increment or respond */
-        response[0] = 0x00;
-        response[1] = 0x00;
+        deploy_status[0] &= 0xFE;
+        deploy_status[0] |= 0x88;
+        deploy_status[1] |= 0x88;
         break;
     case DEPLOY_ANT_1:
         /* Updating the counters, necessary for other command responses */
@@ -233,8 +243,7 @@ void command_decode(uint8_t *response)
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
         deploy_timer_1++;
-        response[0] = 0x00;
-        response[1] = 0x00;
+        deploy_status[1] &= ~(0x80);
         break;
     case DEPLOY_ANT_2:
         /* Updating the counters, necessary for other command responses */
@@ -250,9 +259,8 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
+        deploy_status[1] &= ~(0x08);
         deploy_timer_2++;
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_ANT_3:
         /* Updating the counters, necessary for other command responses */
@@ -268,9 +276,8 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
+        deploy_status[0] &= ~(0x80);
         deploy_timer_3++;
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_ANT_4:
         /* Updating the counters, necessary for other command responses */
@@ -286,9 +293,8 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
+        deploy_status[0] &= ~(0x08);
         deploy_timer_4++;
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_SEQUENCIAL:
         /* Contains the logic for sequencial deployment */
@@ -304,8 +310,6 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_ANT_1_OVERRIDE:
         /* Updating the counters, necessary for other command responses */
@@ -321,9 +325,8 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
+        deploy_status[1] &= ~(0x80);
         deploy_timer_1++;
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_ANT_2_OVERRIDE:
         /* Updating the counters, necessary for other command responses */
@@ -339,9 +342,8 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
+        deploy_status[1] &= ~(0x08);
         deploy_timer_2++;
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_ANT_3_OVERRIDE:
         /* Updating the counters, necessary for other command responses */
@@ -357,9 +359,8 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
+        deploy_status[0] &= ~(0x80);
         deploy_timer_3++;
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_ANT_4_OVERRIDE:
         /* Updating the counters, necessary for other command responses */
@@ -375,19 +376,16 @@ void command_decode(uint8_t *response)
             /* Receives command parameter send by i2c */
             time_to_burn = (uint32_t)rx_buffer[1] * TIME_STEP;
         }
+        deploy_status[0] &= ~(0x08);
         deploy_timer_4++;
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case DEPLOY_CANCEL:
         /* do nothing, since there is nothing to increment or respond */
-        response[0] = 0x00;
-        response[1] = 0x00;
         break;
     case MEASURE_TEMPERATURE:
         /* Simulates reading the temperature and responding its value */
-        response[0] = 0xFF;
-        response[1] = 0x03;
+        response[0] = 0x31;
+        response[1] = 0x02;
         break;
     case REPORT_DEPLOY_TIMER_1:
         /* Simulates responding deploy time using two bytes */
@@ -439,17 +437,17 @@ void command_decode(uint8_t *response)
         break;
     case REPORT_DEPLOY_STATUS:
         /* Simulates responding the deploy status using two bytes */
-        response[0] = 0xFF;
-        response[1] = 0xFF;
+        response[0] = deploy_status[0];
+        response[1] = deploy_status[1];
         break;
     default:
         /* Used for debug purposes, literally means invalid command */
-        response[0] = 0x00;
-        response[1] = 0x00;
+        response[0] = 0x88;
+        response[1] = 0x88;
     }
 }
 /* Setup the timer used for delay */
-void delay_setup(void)
+static void delay_setup(void)
 {
     rcc_periph_clock_enable(RCC_TIM4); /* Enable clock for timer */
 
@@ -470,7 +468,7 @@ void tim4_isr(void)
 }
 
 /* Create delays in microseconds */
-void delay_us(uint32_t us)
+static void delay_us(uint32_t us)
 {
     myticks_ = 0;                 /* Resets counter */
     TIM_CR1(TIM4) |= TIM_CR1_CEN; /* Starts the counting */
@@ -479,4 +477,10 @@ void delay_us(uint32_t us)
         ; /* Lock the process until "us" microseconds passed */
 
     TIM_CR1(TIM4) &= ~TIM_CR1_CEN; /* Clear the starting flag */
+}
+static void setup(void)
+{
+    deploy_status[0] &= ~(0x01);
+    deploy_status[0] |= (0x08 | 0x80);
+    deploy_status[1] |= (0x08 | 0x80);
 }
